@@ -6,9 +6,23 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <arpa/inet.h>
+#include<netinet/in.h>
+#include<fcntl.h>
+#include<sys/sendfile.h>
 
 #define false 0
 #define true 1
+#define TCP_BUFFER_SIZE 2047
+
+char *FNS_IP;
+int FNS_PORT;
+int FNS_sfd;
+
+int num_FDS = -1;
+char **FDS_IP;
+int *FDS_PORT;
+int *FDS_sfd;
 
 //for debug printing
 void pt(int x){
@@ -22,6 +36,11 @@ void ps(char *str){
         fprintf(stderr,"%s\n",str);
     else
         fprintf(stderr,"null\n");
+}
+
+void someErrorExit(){
+    printf("[ERROR]: Some Error Occurred.\n");
+    exit(-1);
 }
 
 char *allocString(int size){
@@ -84,10 +103,10 @@ void test_trim(){
 char *genRandomName(int len){
     char *name = (char *)(calloc(len+1,sizeof(char)));
     name[len] = '\0';
-    const char cset[] = "abcdefghijklmnopqrstuvwxyz1234567890_";    //size 37
+    const char cset[] = "abcdefghijklmnopqrstuvwxyz1234567890";    //size 36
     int i,idx;
     for(i=0;i<len;i++){
-        idx = rand() % 37;
+        idx = rand() % 36;
         name[i] = cset[idx];
     }
     return name;
@@ -146,7 +165,7 @@ void test_strSplit(){
         pi(i);
         ps(arr[i++]);
     }
-    arr = strSplit("netprog",' ');
+    arr = strSplit("FDS 102.122.11.12 8080\nFNS 100.1.1.1 8888",'\n');
     i=0;
     while(arr[i] != NULL){
         pi(i);
@@ -191,7 +210,293 @@ int makeTmpDir(){
     }
 }
 
+long getFileSize(char *file){
+    int fd = open(file,O_RDONLY);
+    if(fd == -1)
+        return -1;
+    long size = lseek(fd,0,SEEK_END);
+    close(fd);
+    return size;
+}
 
+int readConfig(char *fname){
+    if(fname == NULL){
+        printf("[ERROR]: Invalid Argument.\n");
+        return false;
+    }
+    FILE *fp = fopen(fname,"r");
+    if(fp == NULL){
+        printf("[ERROR]: Cannot open the given config file.\n");
+        return false;
+    }
+    FNS_IP = allocString(20);
+    if(fscanf(fp,"%s%d",FNS_IP,&FNS_PORT) == EOF)
+        return false;
+    if(fscanf(fp,"%d",&num_FDS) == EOF)
+        return false;
+    FDS_IP = (char **)(calloc(num_FDS,sizeof(char *)));
+    FDS_PORT = (int *)(calloc(num_FDS,sizeof(int)));
+    for(int i = 0; i < num_FDS; i++){
+        FDS_IP[i] = allocString(20);
+        if(fscanf(fp,"%s%d",FDS_IP[i],&FDS_PORT[i]) == EOF)
+            return false;
+    }
+    return true;
+}
+
+int createConnection(){
+    if(num_FDS == -1)
+        return false;
+    FDS_sfd = (int *)(calloc(num_FDS,sizeof(int)));
+    struct sockaddr_in serveraddr;
+    //Connect to FNS
+    memset(&serveraddr, 0, sizeof(serveraddr));
+    serveraddr.sin_family = AF_INET;
+    serveraddr.sin_addr.s_addr = inet_addr(FNS_IP);
+    serveraddr.sin_port = htons(FNS_PORT);
+    FNS_sfd = socket(PF_INET,SOCK_STREAM,IPPROTO_TCP);
+    if(connect(FNS_sfd,(struct sockaddr *)&serveraddr,sizeof(serveraddr)) == -1){
+        perror("FileNameServer");
+        return false;
+    }
+    char errmsg[50];
+    for(int i=0;i<num_FDS;i++){
+        memset(&serveraddr, 0, sizeof(serveraddr));
+        serveraddr.sin_family = AF_INET;
+        serveraddr.sin_addr.s_addr = inet_addr(FDS_IP[i]);
+        serveraddr.sin_port = htons(FDS_PORT[i]);
+        FDS_sfd[i] = socket(PF_INET,SOCK_STREAM,IPPROTO_TCP);
+        if(connect(FDS_sfd[i],(struct sockaddr *)&serveraddr,sizeof(serveraddr)) == -1){
+            sprintf(errmsg,"connect %s:%d ",FDS_IP[i],FDS_PORT[i]);
+            perror(errmsg);
+            return false;
+        }
+    }
+    return true;
+}
+
+/*
+ * Split a file into n parts and return the base file path
+ * Suppose base file path is "tmp/myfile" and n = 3, then,
+ * parts will be at "tmp/myfile_1" , "tmp/myfile_2" , "tmp_myfile_3"
+ */
+char *splitFile(char *filePath, int n){
+    int rfd = open(filePath,O_RDONLY);
+    if(rfd == -1){
+        perror("open");
+        return NULL;
+    }
+    int wfd,i;
+    long sz;
+    long CHUNK_SIZE = (getFileSize(filePath) / (long)n) + ((getFileSize(filePath) % (long)n) ? 1L : 0L);
+    char *basename = allocString(31);
+    strcat(basename,"tmp/");
+    strcat(basename,genRandomName(10));
+    for(i=1;i<=n;i++){
+        char buf[CHUNK_SIZE+5];
+        sprintf(basename,"%.14s_%d",basename,i);
+        sz = read(rfd,buf,CHUNK_SIZE);
+        wfd = open(basename,O_WRONLY|O_CREAT,0777);
+        write(wfd,buf,sz);
+        close(wfd);
+    }
+    basename[14] = '\0';
+    close(rfd);
+    return basename;
+}
+
+char *joinFile(char *baseFilePath, int n){
+    int wfd = open(baseFilePath,O_WRONLY|O_CREAT,0777);
+    if(wfd == -1){
+        perror("open");
+        return NULL;
+    }
+    int rfd,i;
+    long sz,CHUNK_SIZE;
+    char *filePath = allocString(31);
+    for(i=1;i<=n;i++){
+        sprintf(filePath,"%s_%d",baseFilePath,i);
+        CHUNK_SIZE = getFileSize(filePath);
+        if(CHUNK_SIZE == -1){
+            perror("open");
+            return NULL;
+        }
+        char buf[CHUNK_SIZE+5];
+        rfd = open(filePath,O_RDONLY);
+        if(rfd == -1){
+            perror("open");
+            return NULL;
+        }
+        sz = read(rfd,buf,CHUNK_SIZE);
+        write(wfd,buf,sz);
+        close(rfd);
+    }
+    close(wfd);
+    return baseFilePath;
+}
+
+/*
+ * Uploads the given file to FDS on given idx and returns the retrieved uid
+ */
+char *uploadPart(char *fpath,int FDS_idx){
+    long size = getFileSize(fpath);
+    if(size == -1)
+        return NULL;
+    int fd = open(fpath,O_RDONLY);
+    char *buf = allocString(51);
+    sprintf(buf,"PUT %ld",size);
+    write(FDS_sfd[FDS_idx],buf,strlen(buf));
+    //server returns a string
+    int sz = read(FDS_sfd[FDS_idx],buf,50);  //ERROR or a Unique ID
+    buf[sz] = '\0';
+    if(equals(buf,"ERROR"))
+        return NULL;
+    long ret = sendfile(FDS_sfd[FDS_idx],fd,0,size);
+    if(ret == -1){
+        perror("sendfile");
+        return NULL;
+    }
+    printf("[Upload, Part%d]: Successfully sent %ld bytes.\n",FDS_idx+1,ret);
+    //server returns a unique id for the uploaded file
+    close(fd);
+    return buf;
+}
+
+int downloadPart(char *uid, char *tgtPath,int FDS_idx){
+    long size;
+    int sockfd = FDS_sfd[FDS_idx];
+    char buf[51] = {0};
+    sprintf(buf,"GET %s",uid);
+    write(sockfd,buf,strlen(buf));
+    size = read(sockfd,buf,50);
+    buf[size] = '\0';
+    sscanf(buf,"%ld",&size);
+    if(size == -1){
+        printf("[Download, Part%d]: ERROR, File Not Found.\n",FDS_idx+1);
+        return false;
+    }
+    strcpy(buf,"READY");
+    write(sockfd,buf,strlen(buf));
+    int wfd = open(tgtPath,O_WRONLY|O_CREAT,0777);
+    char wbuf[TCP_BUFFER_SIZE] = {0};
+    long remain_data = size, len;
+    while ((remain_data > 0) && ((len = read(sockfd, wbuf, TCP_BUFFER_SIZE)) > 0))
+    {
+        write(wfd,wbuf,len);
+        remain_data -= len;
+        printf("[Download, Part%d]: Received %ld bytes, Remaining %ld bytes\n",FDS_idx+1,len,remain_data);
+    }
+    close(wfd);
+    return true;
+}
+
+int removePart(char *uid, int FDS_idx){
+    long size;
+    int sockfd = FDS_sfd[FDS_idx];
+    char buf[51] = {0};
+    sprintf(buf,"DEL %s",uid);
+    write(sockfd,buf,strlen(buf));
+    size = read(sockfd,buf,50);
+    buf[size] = '\0';
+    if(equals(buf,"DONE")){
+        printf("[REMOVE, Part%d]: Success.\n",FDS_idx+1);
+        return true;
+    }
+    else{
+        printf("[REMOVE, Part%d]: Failure.\n",FDS_idx+1);
+        return false;
+    }
+}
+
+/*
+ * remote_path should be a file
+ */
+int newFnsEntry(char *remote_path, char **uidarr){
+    int i=0;
+    int size = 5;
+    size += strlen(remote_path);
+    while(uidarr[i] != NULL){
+        size += strlen(uidarr[i]) + 1;
+    }
+    char buf[size];
+    strcpy(buf,remote_path);
+    i = 0;
+    while(uidarr[i] != NULL){
+        strcat(buf,"#");
+        strcat(buf,uidarr[i]);
+    }
+    size = strlen(buf);
+    char tmp[21];
+    sprintf(tmp,"PUT %d",size);
+    write(FNS_sfd,tmp,strlen(tmp));
+    i = read(FNS_sfd,tmp,20);
+    tmp[i] = '\0';
+    if(equals(tmp,"READY")){
+        write(FNS_sfd,buf,size);
+        printf("Added Entry to the FileNameServer.\n");
+        return true;
+    }
+    else{
+        printf("[ERROR]: Failed adding entry to FileNameServer.\n");
+        return false;
+    }
+}
+
+/*
+ * remote_path must be a file
+ */
+char **getFnsData(char *remote_path){
+    int size;
+    char buf[TCP_BUFFER_SIZE];
+    sprintf(buf,"GET %s",remote_path);
+    write(FNS_sfd,buf,strlen(buf));
+    size = read(FNS_sfd,buf,TCP_BUFFER_SIZE);
+    buf[size] = '\0';
+    if(size == 2 && equals(buf,"-1")){
+        printf("[ERROR]: File Not Found.\n");
+        return NULL;
+    }
+    char **uidarr = strSplit(buf,'#');
+    return uidarr;
+}
+
+/*
+ * remote_path must be a directory
+ */
+char **getLs(char *remote_path){
+    int size;
+    char buf[TCP_BUFFER_SIZE];
+    sprintf(buf,"LS %s",remote_path);
+    write(FNS_sfd,buf,strlen(buf));
+    size = read(FNS_sfd,buf,TCP_BUFFER_SIZE);
+    buf[size] = '\0';
+    if(size == 2 && equals(buf,"-1")){
+        printf("[ERROR]: Directory Not Found.\n");
+        return NULL;
+    }
+    char **lsarr = strSplit(buf,'\n');
+    return lsarr;
+}
+
+/*
+ * remote_path should be a file
+ */
+int removeFnsEntry(char *remote_path){
+    long size = strlen(remote_path) + 10;
+    char buf[size];
+    sprintf(buf,"DEL %s",remote_path);
+    write(FNS_sfd,buf,strlen(buf));
+    size = read(FNS_sfd,buf,50);
+    buf[size] = '\0';
+    if(equals(buf,"DONE")){
+        printf("[REMOVE %s]: Success.\n",remote_path);
+        return true;
+    }
+    else{
+        printf("[REMOVE %s]: Failure.\n",remote_path);
+        return false;
+    }
+}
 
 int cmd_cp(char *arg1, char *arg2, int isRecursive){
 
@@ -283,11 +588,16 @@ void execute_cmd(char *cmd){
 
 
 int main() {
-//    printf("Hello, World!\n");
+    printf("Hello, World!\n");
 
 
     srand(time(0));
     makeTmpDir();
+//    char *bname = splitFile("tmp/ip.png",10);
+//    ps(bname);
+//
+//    bname = joinFile(bname,10);
+//    ps(bname);
 
 //    test_equals();
 //    test_numTk();
