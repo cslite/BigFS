@@ -1,0 +1,1 @@
+/usr/bin/cc -g   CMakeFiles/bigfs.dir/Client.c.o  -o bigfs 
