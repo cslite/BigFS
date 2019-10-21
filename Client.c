@@ -283,7 +283,7 @@ void execute_cmd(char *cmd){
 
 
 int main() {
-    printf("Hello, World!\n");
+//    printf("Hello, World!\n");
 
 
     srand(time(0));

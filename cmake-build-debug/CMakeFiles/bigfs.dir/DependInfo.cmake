@@ -4,7 +4,7 @@ set(CMAKE_DEPENDS_LANGUAGES
   )
 # The set of files for implicit dependencies of each language:
 set(CMAKE_DEPENDS_CHECK_C
-  "/home/tussank/bigfs/Client.c" "/home/tussank/bigfs/cmake-build-debug/CMakeFiles/bigfs.dir/Client.c.o"
+  "/home/tussank/bigfs2/Client.c" "/home/tussank/bigfs2/cmake-build-debug/CMakeFiles/bigfs.dir/Client.c.o"
   )
 set(CMAKE_C_COMPILER_ID "GNU")
 
