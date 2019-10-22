@@ -1,0 +1,3 @@
+/home/tussank/bigfs2/fds/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/home/tussank/bigfs2/fds/cmake-build-debug/CMakeFiles/fds.dir
+/home/tussank/bigfs2/fds/cmake-build-debug/CMakeFiles/edit_cache.dir

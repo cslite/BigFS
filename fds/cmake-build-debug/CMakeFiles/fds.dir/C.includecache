@@ -1,0 +1,34 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/tussank/bigfs2/fds/FileDataServer.c
+stdio.h
+-
+stdlib.h
+-
+string.h
+-
+ctype.h
+-
+sys/stat.h
+-
+time.h
+-
+unistd.h
+-
+sys/wait.h
+-
+arpa/inet.h
+-
+netinet/in.h
+-
+fcntl.h
+-
+sys/sendfile.h
+-
+

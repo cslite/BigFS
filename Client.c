@@ -195,6 +195,18 @@ int inBigfs(char *path){
 
 }
 
+void test_inBigFs(){
+    char a[] = "bigfs";
+    pi(inBigfs(a));
+    char b[] = "bigfs/tg1/np";
+    pi(inBigfs(b));
+    char c[] = "bgfs";
+    pi(inBigfs(c));
+}
+
+/*
+ * Called to check if tmp directory exists & if not, it is created.
+ */
 int makeTmpDir(){
     char *dir = "tmp";
     struct stat sb;
@@ -210,6 +222,10 @@ int makeTmpDir(){
     }
 }
 
+/*
+ * Returns the size of the given file
+ * Returns -1 if the file can't be opened.
+ */
 long getFileSize(char *file){
     int fd = open(file,O_RDONLY);
     if(fd == -1)
@@ -219,6 +235,15 @@ long getFileSize(char *file){
     return size;
 }
 
+void test_getFileSize(){
+    pi(getFileSize("tmp/ip.png"));
+    pi(getFileSize("tmp/tmp.avi"));
+    pi(getFileSize("tmp/tmp2/tg1.txt"));
+}
+
+/*
+ * Reads the given config file and parse info about FDS and FNS.
+ */
 int readConfig(char *fname){
     if(fname == NULL){
         printf("[ERROR]: Invalid Argument.\n");
@@ -244,6 +269,23 @@ int readConfig(char *fname){
     return true;
 }
 
+void test_readConfig(){
+    int ret = readConfig("../config.txt");
+    pi(ret);
+    if(ret){
+        ps(FNS_IP);
+        pi(FNS_PORT);
+        int i =0;
+        pi(num_FDS);
+        for(i=0;i<num_FDS;i++){
+            pi(i);
+            ps(FDS_IP[i]);
+            pi(FDS_PORT[i]);
+        }
+
+    }
+}
+
 int createConnection(){
     if(num_FDS == -1)
         return false;
@@ -259,6 +301,9 @@ int createConnection(){
         perror("FileNameServer");
         return false;
     }
+    else{
+        printf("Connected to FileNameServer at %s:%d\n",FNS_IP,FNS_PORT);
+    }
     char errmsg[50];
     for(int i=0;i<num_FDS;i++){
         memset(&serveraddr, 0, sizeof(serveraddr));
@@ -270,6 +315,9 @@ int createConnection(){
             sprintf(errmsg,"connect %s:%d ",FDS_IP[i],FDS_PORT[i]);
             perror(errmsg);
             return false;
+        }
+        else{
+            printf("Connected to FileDataServer%d at %s:%d\n",i+1,FDS_IP[i],FDS_PORT[i]);
         }
     }
     return true;
@@ -362,6 +410,17 @@ char *uploadPart(char *fpath,int FDS_idx){
     return buf;
 }
 
+void test_uploadPart(){
+        char *uup;
+    if((uup=uploadPart("tmp/tmp.avi",0))!=NULL){
+        ps(uup);
+
+    }
+    else{
+        ps("Error in UploadPart");
+    }
+}
+
 int downloadPart(char *uid, char *tgtPath,int FDS_idx){
     long size;
     int sockfd = FDS_sfd[FDS_idx];
@@ -384,10 +443,16 @@ int downloadPart(char *uid, char *tgtPath,int FDS_idx){
     {
         write(wfd,wbuf,len);
         remain_data -= len;
-        printf("[Download, Part%d]: Received %ld bytes, Remaining %ld bytes\n",FDS_idx+1,len,remain_data);
+//        printf("[Download, Part%d]: Received %ld bytes, Remaining %ld bytes\n",FDS_idx+1,len,remain_data);
     }
+    printf("[Download, Part%d]: Received %ld bytes for uid = %s\n",FDS_idx+1,size,uid);
     close(wfd);
     return true;
+}
+
+void test_downloadPart(){
+    if(!downloadPart("p51c05l20v10a0u","tmp/tgfile1",0))
+        ps("Error in DownloadPart");
 }
 
 int removePart(char *uid, int FDS_idx){
@@ -406,6 +471,11 @@ int removePart(char *uid, int FDS_idx){
         printf("[REMOVE, Part%d]: Failure.\n",FDS_idx+1);
         return false;
     }
+}
+
+void test_removePart(){
+    if(!removePart("n7d5eme0708fip6",0))
+        ps("Error in RemovePart");
 }
 
 /*
@@ -498,12 +568,120 @@ int removeFnsEntry(char *remote_path){
     }
 }
 
-int cmd_cp(char *arg1, char *arg2, int isRecursive){
+/*
+ * This will support directory moving as mv supports it
+ */
+int moveFnsEntry(char *srcPath, char *destPath){
 
 }
 
-int cmd_mv(char *arg1, char *arg2, int isRecursive){
+int uploadFile(char *rpath, char *fpath){
+    if(rpath == NULL || fpath == NULL)
+        return false;
+    char *basepath = splitFile(fpath,num_FDS);  //basepath has max size of 30
+    if(basepath == NULL)
+        return false;
+    int sz = strlen(basepath) + 10;
+    char ppath[sz]; //part Path
+    int i;
+    char **uidarr = (char **)(calloc(num_FDS+1,sizeof(char *)));
+    uidarr[num_FDS] = NULL;
+    int p[num_FDS][2];
+    int cpid[num_FDS];
+    for(i=0;i<num_FDS;i++){
+        pipe(p[i]);
+        if((cpid[i] = fork()) == 0){
+            close(p[i][0]);
+            sprintf(ppath,"%s_%d",basepath,i+1);
+            char *tuid = uploadPart(ppath,i);
 
+            if(tuid == NULL){
+                char cbuf[30] = {0};
+                strcpy(cbuf,"null");
+                write(p[i][1],cbuf,4);
+                exit(-1);
+            }
+            else{
+                write(p[i][1],tuid,strlen(tuid));
+                exit(0);
+            }
+
+        }
+        close(p[i][1]);
+    }
+    int partsDone = 0;
+    char buf[101] = {0};
+    for(i=0;i<num_FDS;i = (i+1)%num_FDS){
+        if(partsDone == num_FDS)
+            break;
+        if(cpid[i] == -1)
+            continue;
+        int sz = read(p[i][0],buf,100);
+        buf[sz] = '\0';
+        if(sz == 4 && equals(buf,"null")){
+            return false;
+        }
+        uidarr[i] = allocString(sz);
+        strcpy(uidarr[i],buf);
+        waitpid(cpid[i],NULL,0);
+        partsDone++;
+        cpid[i] = -1;
+    }
+    if(newFnsEntry(rpath,uidarr))
+        return true;
+    else
+        return false;
+
+}
+
+/*
+ * Downloads file at rpath to a tmp location and returns the local path
+ */
+char *downloadFile(char *rpath){
+    char **uidarr = getFnsData(rpath);
+    if(uidarr == NULL)
+        return NULL;
+    char *basepath = allocString(30);
+    strcpy(basepath,"tmp/");
+    strcat(basepath,genRandomName(10));
+    int i;
+    int cpid[num_FDS];
+    for(i=0;i<num_FDS;i++){
+        if((cpid[i] = fork()) == 0){
+            sprintf(basepath,"%s_%d",basepath,i+1);
+            if(downloadPart(uidarr[i],basepath,i))
+                exit(0);
+            else
+                exit(1);
+        }
+    }
+    int partsDone = 0;
+    for(i=0;i<num_FDS;i = (i+1)%num_FDS){
+        if(partsDone == num_FDS)
+            break;
+        if(cpid[i] == -1)
+            continue;
+        int status;
+        waitpid(cpid[i],&status,0);
+        if(WEXITSTATUS(status) == 1){
+            return NULL;
+        }
+        partsDone++;
+        cpid[i] = -1;
+    }
+    return basepath;
+}
+
+int removeFile(char *rpath){
+    char **uidarr = getFnsData(rpath);
+    if(uidarr == NULL)
+        return false;
+    int i;
+    for(i=0;i<num_FDS;i++){
+        removePart(uidarr[i],i);
+    }
+    removeFnsEntry(rpath);
+    return true;
 }
 
 int cmd_ls(char *dpath){
@@ -513,6 +691,79 @@ int cmd_ls(char *dpath){
 int cmd_rm(char *fpath, int isRecursive){
 
 }
+
+int cmd_mv(char *arg1, char *arg2){
+    if(!inBigfs(arg1) && !inBigfs(arg2)){
+        //mv in local storage
+        if(fork() == 0){
+            execlp("mv","mv",arg1,arg2,NULL);
+            perror("execlp");
+            exit(0);
+        }
+        wait(NULL);
+        return true;
+    }
+    if(inBigfs(arg1) && inBigfs(arg2)){
+        if(moveFnsEntry(arg1,arg2))
+            return true;
+        else
+            return false;
+    }
+    else{
+        printf("[ERROR]: Feature not supported.\n");
+        return false;
+    }
+}
+
+
+int cmd_cp(char *arg1, char *arg2, int isRecursive){
+    if(!inBigfs(arg1) && !inBigfs(arg2)){
+        //cp in local storage
+        if(fork() == 0){
+            if(isRecursive)
+                execlp("cp","cp","-r",arg1,arg2,NULL);
+            else
+                execlp("cp","cp",arg1,arg2,NULL);
+            perror("execlp");
+            exit(0);
+        }
+        wait(NULL);
+        return true;
+    }
+    if(!isRecursive){
+        //copy a single file
+        if(inBigfs(arg1) && inBigfs(arg2)){
+            //both remote
+            //TODO: WRITE CODE FOR THIS PART
+            printf("[ERROR]: cp only supports copying from/to remote server to/from local storage\n");
+        }
+        else if(inBigfs(arg1)){
+            //download remote file
+            char *tmpPath = downloadFile(arg1);
+            if(tmpPath == NULL)
+                return false;
+            if(!cmd_mv(tmpPath,arg2))
+                return false;
+            return true;
+        }
+        else{
+            //upload file to bigfs
+            if(uploadFile(arg2,arg1))
+                return true;
+            else
+                return false;
+        }
+    }
+    else{
+        //copy a directory
+    }
+}
+
+
+
+
+
+
 
 int cmd_cat(char *fpath){
     if(fpath == NULL)
@@ -556,9 +807,7 @@ void execute_cmd(char *cmd){
             printf("[ERROR]: Please check the entered paths.\n");
     }
     else if(equals(cmdarr[0],"mv")){
-        if(cmdarr[1] && cmdarr[2] && cmdarr[3] && equals(cmdarr[1],"-r") && cmd_mv(cmdarr[2],cmdarr[3],true))
-            return;
-        else if(cmdarr[1] && cmdarr[2] && !cmdarr[3] && cmd_mv(cmdarr[1],cmdarr[2],false))
+        if(cmdarr[1] && cmdarr[2] && !cmdarr[3] && cmd_mv(cmdarr[1],cmdarr[2]))
             return;
         else
             printf("[ERROR]: Please check the entered paths.\n");
@@ -579,6 +828,9 @@ void execute_cmd(char *cmd){
         else
             printf("[ERROR]: Unable to delete the given file/folder.\n");
     }
+    else if(equals(cmdarr[0],"exit")){
+        exit(0);
+    }
     else{
         printf("[ERROR]: Command not recognized.\n");
         return;
@@ -593,6 +845,17 @@ int main() {
 
     srand(time(0));
     makeTmpDir();
+    if(!readConfig("../config.txt"))
+        return -1;
+    createConnection();
+    char inp[101] = {0};
+//    test_downloadPart();
+//    test_removePart();
+
+
+    while(1){
+        fgets(inp,100,stdin);
+    }
 //    char *bname = splitFile("tmp/ip.png",10);
 //    ps(bname);
 //
@@ -604,6 +867,9 @@ int main() {
 //    test_genRandomName();
 //    test_strSplit();
 //    test_trim();
+//    test_inBigFs();
+//    test_getFileSize();
+//    test_readConfig();
 
     return 0;
 }
