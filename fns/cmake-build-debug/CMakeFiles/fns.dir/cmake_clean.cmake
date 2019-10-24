@@ -1,5 +1,5 @@
 file(REMOVE_RECURSE
-  "CMakeFiles/fns.dir/main.c.o"
+  "CMakeFiles/fns.dir/FileNameServer.c.o"
   "fns"
   "fns.pdb"
 )

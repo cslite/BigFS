@@ -78,7 +78,7 @@
 				</MakeCommands>
 			</Target>
 		</Build>
-		<Unit filename="/home/tussank/bigfs2/fns/main.c">
+		<Unit filename="/home/tussank/bigfs2/fns/FileNameServer.c">
 			<Option target="fns"/>
 		</Unit>
 		<Unit filename="/home/tussank/bigfs2/fns/CMakeLists.txt">

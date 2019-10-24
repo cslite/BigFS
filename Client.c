@@ -14,7 +14,9 @@
 #define false 0
 #define true 1
 #define TCP_BUFFER_SIZE 2047
+#define MAX_ARRAY_SIZE (1<<20) //1GB Array
 
+//Global Variables
 char *FNS_IP;
 int FNS_PORT;
 int FNS_sfd;
@@ -23,6 +25,8 @@ int num_FDS = -1;
 char **FDS_IP;
 int *FDS_PORT;
 int *FDS_sfd;
+//for IPs, PORTs, Socket FDs
+
 
 //for debug printing
 void pt(int x){
@@ -139,6 +143,11 @@ void test_numTk(){
     pi(numTk(" this is a test 5",' '));
 }
 
+void socketLost(){
+    ps("Connection to one or more servers lost.");
+    exit(-1);
+}
+
 /*
  * Split a string and put into an array based on the given delimiter
  */
@@ -205,10 +214,9 @@ void test_inBigFs(){
 }
 
 /*
- * Called to check if tmp directory exists & if not, it is created.
+ * Called to check if a directory exists & if not, it is created.
  */
-int makeTmpDir(){
-    char *dir = "tmp";
+int makeDir(char *dir){
     struct stat sb;
     if(stat(dir,&sb)== 0 && S_ISDIR(sb.st_mode))
         return true;
@@ -217,6 +225,7 @@ int makeTmpDir(){
             return true;
         else{
             perror("mkdir");
+            ps(dir);
             return false;
         }
     }
@@ -239,6 +248,21 @@ void test_getFileSize(){
     pi(getFileSize("tmp/ip.png"));
     pi(getFileSize("tmp/tmp.avi"));
     pi(getFileSize("tmp/tmp2/tg1.txt"));
+}
+
+/*
+ * An input like /home/tg/netprog will return netprog
+ */
+char *getDeepestDir(char *path){
+    int n = strlen(path);
+    int slc = numTk(path,'/');
+    int i=0;
+    while(slc){
+        if(path[i] == '/')
+            slc--;
+        i++;
+    }
+    return (path + i);
 }
 
 /*
@@ -284,6 +308,18 @@ void test_readConfig(){
         }
 
     }
+}
+
+void printConfigFileFormat(){
+    printf("\n## CONFIG FILE FORMAT ##\n\n");
+    printf("<FNS IP> <FNS PORT>\n");
+    printf("<k = Number of FDS>\n");
+    printf("<FDS1 IP> <FDS1 PORT>\n");
+    printf("<FDS2 IP> <FDS2 PORT>\n");
+    printf("..\n");
+    printf("..\n");
+    printf("..\n");
+    printf("<FDSk IP> <FDSk PORT>\n\n");
 }
 
 int createConnection(){
@@ -341,11 +377,17 @@ char *splitFile(char *filePath, int n){
     strcat(basename,"tmp/");
     strcat(basename,genRandomName(10));
     for(i=1;i<=n;i++){
-        char buf[CHUNK_SIZE+5];
+        char buf[MAX_ARRAY_SIZE];
         sprintf(basename,"%.14s_%d",basename,i);
-        sz = read(rfd,buf,CHUNK_SIZE);
-        wfd = open(basename,O_WRONLY|O_CREAT,0777);
-        write(wfd,buf,sz);
+        long toRead = CHUNK_SIZE;
+        wfd = open(basename,O_WRONLY|O_CREAT,0666);
+        while(toRead > 0){
+            sz = read(rfd,buf,MAX_ARRAY_SIZE);
+            if(sz == 0)
+                break;
+            write(wfd,buf,sz);
+            toRead -= sz;
+        }
         close(wfd);
     }
     basename[14] = '\0';
@@ -354,7 +396,7 @@ char *splitFile(char *filePath, int n){
 }
 
 char *joinFile(char *baseFilePath, int n){
-    int wfd = open(baseFilePath,O_WRONLY|O_CREAT,0777);
+    int wfd = open(baseFilePath,O_WRONLY|O_CREAT,0666);
     if(wfd == -1){
         perror("open");
         return NULL;
@@ -369,18 +411,31 @@ char *joinFile(char *baseFilePath, int n){
             perror("open");
             return NULL;
         }
-        char buf[CHUNK_SIZE+5];
+        long toRead = CHUNK_SIZE;
+        char buf[MAX_ARRAY_SIZE];
         rfd = open(filePath,O_RDONLY);
         if(rfd == -1){
             perror("open");
             return NULL;
         }
-        sz = read(rfd,buf,CHUNK_SIZE);
-        write(wfd,buf,sz);
+        while(toRead > 0){
+            sz = read(rfd,buf,MAX_ARRAY_SIZE);
+            write(wfd,buf,sz);
+            toRead -= sz;
+        }
         close(rfd);
     }
     close(wfd);
+    free(filePath);
     return baseFilePath;
+}
+
+void test_joinFile_splitFile(){
+    char *bname = splitFile("tmp/ip.png",10);
+    ps(bname);
+
+    bname = joinFile(bname,10);
+    ps(bname);
 }
 
 /*
@@ -393,18 +448,25 @@ char *uploadPart(char *fpath,int FDS_idx){
     int fd = open(fpath,O_RDONLY);
     char *buf = allocString(51);
     sprintf(buf,"PUT %ld",size);
-    write(FDS_sfd[FDS_idx],buf,strlen(buf));
+    if(write(FDS_sfd[FDS_idx],buf,strlen(buf))==0)
+        return NULL;
     //server returns a string
     int sz = read(FDS_sfd[FDS_idx],buf,50);  //ERROR or a Unique ID
-    buf[sz] = '\0';
-    if(equals(buf,"ERROR"))
+//    pi(sz);
+    if(sz == 0)
         return NULL;
+    buf[sz] = '\0';
+    if(equals(buf,"ERROR")){
+        ps("FDS returned ERROR.");
+        return NULL;
+    }
+
     long ret = sendfile(FDS_sfd[FDS_idx],fd,0,size);
     if(ret == -1){
         perror("sendfile");
         return NULL;
     }
-    printf("[Upload, Part%d]: Successfully sent %ld bytes.\n",FDS_idx+1,ret);
+    printf("[Upload, Part%d]: Successfully sent %ld bytes. UID = %s\n",FDS_idx+1,ret,buf);
     //server returns a unique id for the uploaded file
     close(fd);
     return buf;
@@ -426,8 +488,11 @@ int downloadPart(char *uid, char *tgtPath,int FDS_idx){
     int sockfd = FDS_sfd[FDS_idx];
     char buf[51] = {0};
     sprintf(buf,"GET %s",uid);
-    write(sockfd,buf,strlen(buf));
+    if(write(sockfd,buf,strlen(buf))==0)
+        return false;
     size = read(sockfd,buf,50);
+    if(size == 0)
+        return false;
     buf[size] = '\0';
     sscanf(buf,"%ld",&size);
     if(size == -1){
@@ -435,8 +500,9 @@ int downloadPart(char *uid, char *tgtPath,int FDS_idx){
         return false;
     }
     strcpy(buf,"READY");
-    write(sockfd,buf,strlen(buf));
-    int wfd = open(tgtPath,O_WRONLY|O_CREAT,0777);
+    if(write(sockfd,buf,strlen(buf))==0)
+        return false;
+    int wfd = open(tgtPath,O_WRONLY|O_CREAT,0666);
     char wbuf[TCP_BUFFER_SIZE] = {0};
     long remain_data = size, len;
     while ((remain_data > 0) && ((len = read(sockfd, wbuf, TCP_BUFFER_SIZE)) > 0))
@@ -460,8 +526,11 @@ int removePart(char *uid, int FDS_idx){
     int sockfd = FDS_sfd[FDS_idx];
     char buf[51] = {0};
     sprintf(buf,"DEL %s",uid);
-    write(sockfd,buf,strlen(buf));
+    if(write(sockfd,buf,strlen(buf)) == 0)
+        return false;
     size = read(sockfd,buf,50);
+    if(size == 0)
+        return false;
     buf[size] = '\0';
     if(equals(buf,"DONE")){
         printf("[REMOVE, Part%d]: Success.\n",FDS_idx+1);
@@ -487,22 +556,27 @@ int newFnsEntry(char *remote_path, char **uidarr){
     size += strlen(remote_path);
     while(uidarr[i] != NULL){
         size += strlen(uidarr[i]) + 1;
+        i++;
     }
     char buf[size];
     strcpy(buf,remote_path);
     i = 0;
     while(uidarr[i] != NULL){
         strcat(buf,"#");
-        strcat(buf,uidarr[i]);
+        strcat(buf,uidarr[i++]);
     }
     size = strlen(buf);
     char tmp[21];
     sprintf(tmp,"PUT %d",size);
-    write(FNS_sfd,tmp,strlen(tmp));
+    if(write(FNS_sfd,tmp,strlen(tmp))==0)
+        socketLost();
     i = read(FNS_sfd,tmp,20);
+    if(i==0)
+        socketLost();
     tmp[i] = '\0';
     if(equals(tmp,"READY")){
-        write(FNS_sfd,buf,size);
+        if(write(FNS_sfd,buf,size)==0)
+            socketLost();
         printf("Added Entry to the FileNameServer.\n");
         return true;
     }
@@ -512,6 +586,15 @@ int newFnsEntry(char *remote_path, char **uidarr){
     }
 }
 
+void test_newFnsEntry(){
+    char *uids = "ghfduoncki#ddjfuiodfg#dfnherthgu";
+    char **ua = strSplit(uids,'#');
+    if(!newFnsEntry("bigfs/tgtest1/tg2/hello.py",ua))
+        ps("Error in newFnsEntry");
+    else
+        ps("No error");
+}
+
 /*
  * remote_path must be a file
  */
@@ -519,8 +602,11 @@ char **getFnsData(char *remote_path){
     int size;
     char buf[TCP_BUFFER_SIZE];
     sprintf(buf,"GET %s",remote_path);
-    write(FNS_sfd,buf,strlen(buf));
+    if(write(FNS_sfd,buf,strlen(buf)) == 0)
+        socketLost();
     size = read(FNS_sfd,buf,TCP_BUFFER_SIZE);
+    if(size == 0)
+        socketLost();
     buf[size] = '\0';
     if(size == 2 && equals(buf,"-1")){
         printf("[ERROR]: File Not Found.\n");
@@ -530,6 +616,15 @@ char **getFnsData(char *remote_path){
     return uidarr;
 }
 
+void test_getFnsData(){
+    char **uidarr = getFnsData("bigfs/tgtest1/tg2/hello.py");
+    int i = 0;
+    while(uidarr[i] != NULL){
+        pi(i);
+        ps(uidarr[i++]);
+    }
+}
+
 /*
  * remote_path must be a directory
  */
@@ -537,15 +632,28 @@ char **getLs(char *remote_path){
     int size;
     char buf[TCP_BUFFER_SIZE];
     sprintf(buf,"LS %s",remote_path);
-    write(FNS_sfd,buf,strlen(buf));
+    if(write(FNS_sfd,buf,strlen(buf)) == 0)
+        socketLost();
     size = read(FNS_sfd,buf,TCP_BUFFER_SIZE);
+    if(size == 0)
+        socketLost();
     buf[size] = '\0';
     if(size == 2 && equals(buf,"-1")){
         printf("[ERROR]: Directory Not Found.\n");
         return NULL;
     }
-    char **lsarr = strSplit(buf,'\n');
+    char *tbuf = trim(buf);
+    char **lsarr = strSplit(tbuf,'\n');
     return lsarr;
+}
+
+void test_getLs(){
+    char **larr = getLs("../");
+    int i = 0;
+    while(larr[i] != NULL){
+        pi(i);
+        ps(larr[i++]);
+    }
 }
 
 /*
@@ -555,8 +663,11 @@ int removeFnsEntry(char *remote_path){
     long size = strlen(remote_path) + 10;
     char buf[size];
     sprintf(buf,"DEL %s",remote_path);
-    write(FNS_sfd,buf,strlen(buf));
+    if(write(FNS_sfd,buf,strlen(buf))==0)
+        socketLost();
     size = read(FNS_sfd,buf,50);
+    if(size == 0)
+        socketLost();
     buf[size] = '\0';
     if(equals(buf,"DONE")){
         printf("[REMOVE %s]: Success.\n",remote_path);
@@ -568,12 +679,37 @@ int removeFnsEntry(char *remote_path){
     }
 }
 
+void test_removeFnsEntry(){
+    if(!removeFnsEntry("bigfs/tgtest1/tg2/hello.py"))
+        ps("Error in removeFnsEntry");
+}
+
 /*
  * This will support directory moving as mv supports it
+ * NOT TESTED YET
+ * TODO: TEST THIS FUNCTION
  */
 int moveFnsEntry(char *srcPath, char *destPath){
-
+    long size = strlen(srcPath) + strlen(destPath) + 10;
+    char buf[size];
+    sprintf(buf,"MOV %s %s",srcPath,destPath);
+    if(write(FNS_sfd,buf,strlen(buf))==0)
+        socketLost();
+    size = read(FNS_sfd,buf,50);
+    if(size == 0)
+        socketLost();
+    buf[size] = '\0';
+    if(equals(buf,"DONE")){
+        printf("[MOVE]: Success.\n");
+        return true;
+    }
+    else{
+        printf("[MOVE]: Failure.\n");
+        return false;
+    }
 }
+
+int cmd_rm(char *fpath, int isRecursive);
 
 int uploadFile(char *rpath, char *fpath){
     if(rpath == NULL || fpath == NULL)
@@ -594,8 +730,8 @@ int uploadFile(char *rpath, char *fpath){
             close(p[i][0]);
             sprintf(ppath,"%s_%d",basepath,i+1);
             char *tuid = uploadPart(ppath,i);
-
             if(tuid == NULL){
+                ps("UploadPart has returned null");
                 char cbuf[30] = {0};
                 strcpy(cbuf,"null");
                 write(p[i][1],cbuf,4);
@@ -605,7 +741,6 @@ int uploadFile(char *rpath, char *fpath){
                 write(p[i][1],tuid,strlen(tuid));
                 exit(0);
             }
-
         }
         close(p[i][1]);
     }
@@ -621,16 +756,30 @@ int uploadFile(char *rpath, char *fpath){
         if(sz == 4 && equals(buf,"null")){
             return false;
         }
-        uidarr[i] = allocString(sz);
+        uidarr[i] = allocString(sz+1);
         strcpy(uidarr[i],buf);
         waitpid(cpid[i],NULL,0);
         partsDone++;
         cpid[i] = -1;
     }
-    if(newFnsEntry(rpath,uidarr))
-        return true;
-    else
+    int failed = false;
+    if(!newFnsEntry(rpath,uidarr)){
+        ps("Failed while trying to add entry to FNS.");
+        i = 0;
+        while(uidarr[i] != NULL){
+            removePart(uidarr[i],i);
+            i++;
+        }
+        failed = true;
+    }
+    //remove all temporarily generated files
+    for(i=0;i<num_FDS;i++){
+        sprintf(ppath,"%s_%d",basepath,i+1);
+        cmd_rm(ppath,false);
+    }
+    if(failed)
         return false;
+    return true;
 
 }
 
@@ -647,12 +796,15 @@ char *downloadFile(char *rpath){
     int i;
     int cpid[num_FDS];
     for(i=0;i<num_FDS;i++){
-        if((cpid[i] = fork()) == 0){
-            sprintf(basepath,"%s_%d",basepath,i+1);
-            if(downloadPart(uidarr[i],basepath,i))
+        if((cpid[i] = fork()) == 0) {
+            sprintf(basepath, "%s_%d", basepath, i + 1);
+            if (downloadPart(uidarr[i], basepath, i))
                 exit(0);
-            else
+            else {
+                ps("Download Part failed.");
+                ps(uidarr[i]);
                 exit(1);
+            }
         }
     }
     int partsDone = 0;
@@ -669,7 +821,36 @@ char *downloadFile(char *rpath){
         partsDone++;
         cpid[i] = -1;
     }
+    if((basepath = joinFile(basepath,num_FDS)) == NULL){
+        ps("Error joining parts.");
+    }
+    //remove the temporarily generated parts
+    for(i=0;i<num_FDS;i++){
+        char tmppath[50] = {0};
+        sprintf(tmppath, "%s_%d", basepath, i + 1);
+        cmd_rm(tmppath,false);
+    }
     return basepath;
+}
+
+char **getLsLocal(char *dpath){
+    int p[2];
+    pipe(p);
+    if(fork() == 0){
+        close(p[0]);
+        close(1);
+        dup2(p[1],1);
+        execlp("ls","ls","-F",dpath,NULL);
+        perror("execlp");
+        exit(0);
+    }
+    close(p[1]);
+    wait(NULL);
+    char buf[TCP_BUFFER_SIZE] = {0};
+    int nr = read(p[0],buf,TCP_BUFFER_SIZE);
+    buf[nr] = '\0';
+    close(p[0]);
+    return strSplit(trim(buf),'\n');
 }
 
 int removeFile(char *rpath){
@@ -685,11 +866,56 @@ int removeFile(char *rpath){
 }
 
 int cmd_ls(char *dpath){
-
+    char **larr;
+    if(!inBigfs(dpath))
+        larr = getLsLocal(dpath);
+    else
+        larr = getLs(dpath);
+    if(larr == NULL)
+        return false;
+    int i = 0;
+    while(larr[i] != NULL){
+        printf("%s\n",larr[i++]);
+    }
+    return true;
 }
 
 int cmd_rm(char *fpath, int isRecursive){
-
+    if(!inBigfs(fpath)){
+        //rm in local storage
+        if(fork() == 0){
+            execlp("rm","rm","-r",fpath,NULL);
+            perror("execlp");
+            exit(0);
+        }
+        wait(NULL);
+        return true;
+    }
+    if(!isRecursive)
+        return removeFile(fpath);
+    else{
+        //remove a directory
+        char **larr = getLs(fpath);
+        int i=0;
+        while(larr[i] != NULL){
+            int n = strlen(larr[i]);
+            char *nfpath = allocString(strlen(fpath) + n+1);
+            strcpy(nfpath,fpath);
+            strcat(nfpath,larr[i]);
+            if(larr[i][n-1] == '/'){
+                //it is a directory
+                cmd_rm(nfpath,true);
+            }
+            else{
+                //it is a file
+                cmd_rm(nfpath,false);
+            }
+            free(nfpath);
+            i++;
+        }
+        removeFnsEntry(fpath);
+        return true;
+    }
 }
 
 int cmd_mv(char *arg1, char *arg2){
@@ -718,7 +944,7 @@ int cmd_mv(char *arg1, char *arg2){
 
 int cmd_cp(char *arg1, char *arg2, int isRecursive){
     if(!inBigfs(arg1) && !inBigfs(arg2)){
-        //cp in local storage
+        //cp in local storage (both files are local)
         if(fork() == 0){
             if(isRecursive)
                 execlp("cp","cp","-r",arg1,arg2,NULL);
@@ -730,51 +956,99 @@ int cmd_cp(char *arg1, char *arg2, int isRecursive){
         wait(NULL);
         return true;
     }
+    if(inBigfs(arg1) && inBigfs(arg2)){
+        //both remote
+        //TODO: WRITE CODE FOR THIS PART
+        printf("[ERROR]: currently cp only supports copying from/to remote server to/from local storage\n");
+        return false;
+    }
     if(!isRecursive){
         //copy a single file
-        if(inBigfs(arg1) && inBigfs(arg2)){
-            //both remote
-            //TODO: WRITE CODE FOR THIS PART
-            printf("[ERROR]: cp only supports copying from/to remote server to/from local storage\n");
-        }
-        else if(inBigfs(arg1)){
-            //download remote file
+        if(inBigfs(arg1)) {
+            //download remote file to tmpPath
             char *tmpPath = downloadFile(arg1);
-            if(tmpPath == NULL)
+            if (tmpPath == NULL)
                 return false;
-            if(!cmd_mv(tmpPath,arg2))
+            //move it to the required location
+            if (!cmd_mv(tmpPath, arg2)) {
+                //remove the file, if move fails and report the error
+                cmd_rm(tmpPath,false);
                 return false;
+            }
             return true;
         }
         else{
             //upload file to bigfs
             if(uploadFile(arg2,arg1))
                 return true;
-            else
+            else{
+                ps("Upload file failed.");
                 return false;
+            }
         }
     }
     else{
         //copy a directory
+        if(inBigfs(arg1))
+            if (!makeDir(arg2))
+                return false;
+        int arg1len = strlen(arg1);
+        if (arg1[arg1len - 1] != '/') {
+            //this folder along with its content will be copied
+            char *ddir = getDeepestDir(arg1);
+            char *narg1 = allocString(arg1len + 5);
+            char *narg2 = allocString(strlen(arg2) + strlen(ddir) + 5);
+            strcpy(narg1, arg1);
+            strcat(narg1, "/");
+            strcpy(narg2, arg2);
+            strcat(narg2, ddir);
+            strcat(narg2, "/");
+            return cmd_cp(narg1, narg2, true);
+        }
+        char **larr;
+        if(inBigfs(arg1)) {
+            //download recursively
+            larr = getLs(arg1);
+        }
+        else{
+           larr = getLsLocal(arg1);
+        }
+        int i = 0;
+        while (larr[i] != NULL) {
+            int n = strlen(larr[i]);
+            char *narg1 = allocString(strlen(arg1) + n + 1);
+            strcpy(narg1, arg1);
+            strcat(narg1, larr[i]);
+            char *narg2 = allocString(strlen(arg2) + n + 1);
+            strcpy(narg2, arg2);
+            strcat(narg2, larr[i]);
+            if (larr[i][n - 1] == '/') {
+                //it is a directory
+                cmd_cp(narg1, narg2, true);
+            } else {
+                //it is a file
+                cmd_cp(narg1, narg2, false);
+            }
+            free(narg1);
+            free(narg2);
+            i++;
+        }
+        return true;
     }
 }
 
-
-
-
-
-
-
+/*
+ * cat is directly run for local files
+ * for remote files, they are downloaded temporarily, cat is run, then temporary file is deleted.
+ */
 int cmd_cat(char *fpath){
     if(fpath == NULL)
         return false;
     char *localpath = fpath;
     if(inBigfs(fpath)){
         //cat in bigfs
-        localpath = allocString(14);
-        strcat(localpath,"tmp/");
-        strcat(localpath,genRandomName(10));
-        if(!cmd_cp(fpath,localpath,false))
+        localpath = downloadFile(fpath);
+        if(localpath == NULL)
             return false;
     }
     //cat in local storage
@@ -784,22 +1058,29 @@ int cmd_cat(char *fpath){
         exit(0);
     }
     wait(NULL);
+    //remove the temporarily downloaded file
+    if(inBigfs(fpath)){
+        cmd_rm(localpath,false);
+        free(localpath);
+    }
     return true;
 }
 
 void execute_cmd(char *cmd){
+    //remove leading and trailing spaces from the cmd
     cmd = trim(cmd);
+    //split the cmd based on spaces
     char **cmdarr = strSplit(cmd,' ');
     if(cmdarr == NULL)
         return;
     if(equals(cmdarr[0],"cat")){
-        if(cmdarr[1] != NULL && cmd_cat(cmdarr[1]))
+        if(cmdarr[1] && !cmdarr[2] && cmd_cat(cmdarr[1]))
             return;
         else
             printf("[ERROR]: Please check the file path.\n");
     }
     else if(equals(cmdarr[0],"cp")){
-        if(cmdarr[1] && cmdarr[2] && cmdarr[3] && equals(cmdarr[1],"-r") && cmd_cp(cmdarr[2],cmdarr[3],true))
+        if(cmdarr[1] && cmdarr[2] && cmdarr[3] && !cmdarr[4] && equals(cmdarr[1],"-r") && cmd_cp(cmdarr[2],cmdarr[3],true))
             return;
         else if(cmdarr[1] && cmdarr[2] && !cmdarr[3] && cmd_cp(cmdarr[1],cmdarr[2],false))
             return;
@@ -813,15 +1094,15 @@ void execute_cmd(char *cmd){
             printf("[ERROR]: Please check the entered paths.\n");
     }
     else if(equals(cmdarr[0],"ls")){
-        if(cmdarr[1] != NULL && cmd_ls(cmdarr[1]))
+        if(cmdarr[1] && !cmdarr[2] && cmd_ls(cmdarr[1]))
             return;
-        else if(cmdarr[1] == NULL && cmd_ls("bigfs"))
+        else if(!cmdarr[1] && cmd_ls("bigfs"))
             return;
         else
             printf("[ERROR]: There was an error while trying to do ls.\n");
     }
     else if(equals(cmdarr[0],"rm")){
-        if(cmdarr[1] && cmdarr[2] && equals(cmdarr[1],"-r") && cmd_rm(cmdarr[2],true))
+        if(cmdarr[1] && cmdarr[2] && !cmdarr[3] && equals(cmdarr[1],"-r") && cmd_rm(cmdarr[2],true))
             return;
         else if(cmdarr[1] && !cmdarr[2] && cmd_rm(cmdarr[1],false))
             return;
@@ -829,6 +1110,7 @@ void execute_cmd(char *cmd){
             printf("[ERROR]: Unable to delete the given file/folder.\n");
     }
     else if(equals(cmdarr[0],"exit")){
+        printf("Exiting...\n");
         exit(0);
     }
     else{
@@ -839,29 +1121,40 @@ void execute_cmd(char *cmd){
 
 
 
-int main() {
-    printf("Hello, World!\n");
-
-
-    srand(time(0));
-    makeTmpDir();
-    if(!readConfig("../config.txt"))
+int main(int argc, char *argv[]) {
+    if(argc != 2){
+        printf("You need to give path to the config file as a command line argument.\n");
         return -1;
-    createConnection();
+    }
+    char *cfgfile = argv[1];
+    srand(time(0));
+    //make a directory to store temporary files
+    makeDir("tmp");
+    //read the config file
+    if(!readConfig(cfgfile)){
+        ps("Error reading the config file.");
+        printConfigFileFormat();
+        return -1;
+    }
+    //create connection with all the servers
+    if(!createConnection()){
+        ps("[ERROR]: Problem connecting with server(s).");
+        return -1;
+    }
     char inp[101] = {0};
-//    test_downloadPart();
-//    test_removePart();
-
 
     while(1){
+        printf("\n $ ");
         fgets(inp,100,stdin);
+        execute_cmd(inp);
     }
-//    char *bname = splitFile("tmp/ip.png",10);
-//    ps(bname);
-//
-//    bname = joinFile(bname,10);
-//    ps(bname);
 
+//    test_downloadPart();
+//    test_removePart();
+//    test_newFnsEntry();
+//    test_getFnsData();
+//    test_removeFnsEntry();
+//    test_getLs();
 //    test_equals();
 //    test_numTk();
 //    test_genRandomName();

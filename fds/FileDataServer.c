@@ -62,6 +62,21 @@ int equals(char *s1, char *s2){
 }
 
 /*
+ * Generate a random alpha-numeric string of length len
+ */
+char *genRandomName(int len){
+    char *name = (char *)(calloc(len+1,sizeof(char)));
+    name[len] = '\0';
+    const char cset[] = "abcdefghijklmnopqrstuvwxyz1234567890";    //size 36
+    int i,idx;
+    for(i=0;i<len;i++){
+        idx = rand() % 36;
+        name[i] = cset[idx];
+    }
+    return name;
+}
+
+/*
 Count the number of occurrences of tk in str
 */
 int numTk(char *str,char tk){
@@ -74,27 +89,28 @@ int numTk(char *str,char tk){
     return cnt;
 }
 
+char * trim (char *str) { // remove leading and trailing spaces
+    str = strdup(str);
+    if(str == NULL)
+        return NULL;
+    int begin = 0, end = strlen(str) -1, i;
+    while (isspace (str[begin])){
+        begin++;
+    }
+
+    if (str[begin] != '\0'){
+        while (isspace (str[end]) || str[end] == '\n'){
+            end--;
+        }
+    }
+    str[end + 1] = '\0';
+
+    return str+begin;
+}
+
 void convertToNonBlocking(int fd){
     int val = fcntl(fd,F_GETFL,0);
     fcntl(fd,F_SETFL,val|O_NONBLOCK);
-}
-
-/*
- * Split a string and put into an array based on the given delimiter
- */
-char **strSplit(char *str, char tk){
-    if(equals(str,"") || equals(str,NULL))
-        return NULL;
-    char tkn[] = {tk};
-    int sz = numTk(str,tk) + 2;
-    char **arr = (char **)(calloc(sz,sizeof(char *)));
-    char *tmpstr = strdup(str);
-    int i = 0;
-    char *token;
-    while((token = strsep(&tmpstr,tkn)))
-        arr[i++] = token;
-    arr[i] = NULL;
-    return arr;
 }
 
 /*
@@ -127,25 +143,12 @@ int makeBigfsDir(){
         }
     }
 }
-int makeDir(char *dir){
-    struct stat sb;
-    if(stat(dir,&sb)== 0 && S_ISDIR(sb.st_mode))
-        return true;
-    else{
-        if(mkdir(dir,0777) == 0)
-            return true;
-        else{
-            perror("mkdir");
-            return false;
-        }
-    }
-}
 
 /*
- * Send the file data on the the given fpath to the socket on sockfd
+ * Send the file on the the given fpath to the socket on sockfd
  * toWrite stores the size of the file to be sent
  */
-int sendData(int sockfd, char *fpath, long toWrite){
+int sendFile(int sockfd, char *fpath, long toWrite){
     int rfd = open(fpath,O_RDONLY);
     if(rfd == -1)
         return false;
@@ -155,40 +158,29 @@ int sendData(int sockfd, char *fpath, long toWrite){
     sendfile(sockfd,rfd,0,toWrite);
 
     fcntl(sockfd,F_SETFL,val);
-    printf("Sent data at %s\n",fpath);
-    return true;
-}
 
-void checkAndMakePath(char *fpath){
-    char tmp;
-    int n = strlen(fpath);
-    for(int i=0;i<n;i++){
-        if(fpath[i] == '/'){
-            fpath[i] = '\0';
-            makeDir(fpath);
-            fpath[i] = '/';
-        }
-    }
+    return true;
+
 }
 
 /*
  * Get file from the socket on sockfd and store it on local storage
  */
-int recvData(int sockfd, long toRead){
+int recvFile(int sockfd, long toRead,char *uid){
     //assuming sockfd is already set to non-blocking
-    char *fpath;
-    struct timeval timeout;
-    timeout.tv_sec = 30;
-    timeout.tv_usec = 0;
+    char *fpath = allocString(30);
+    strcat(fpath,BASE_DIR);
+    strcat(fpath,uid);
+    int wfd = open(fpath,O_WRONLY|O_CREAT,0666);
+    if(wfd == -1)
+        return false;
     long nread;
+    int val = fcntl(sockfd,F_GETFL);
+    fcntl(sockfd,F_SETFL,val & (~O_NONBLOCK));
+    while(toRead > 0){
+        char buf[TCP_BUFFER_SIZE+1] = {0};
 
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
-    FD_SET(sockfd,&read_fds);
-    select(sockfd+1,&read_fds,NULL,NULL,&timeout);
-    char buf[TCP_BUFFER_SIZE+1] = {0};
-    if(FD_ISSET(sockfd,&read_fds)){
-        if((nread = read(sockfd,buf,toRead)) < 0){
+        if((nread = read(sockfd,buf,min(toRead,TCP_BUFFER_SIZE))) < 0){
             perror("read");
         }
         else if(nread == 0){
@@ -196,27 +188,20 @@ int recvData(int sockfd, long toRead){
             return false;
         }
         else{
-            char **datarr = strSplit(buf,'#');
-            fpath = datarr[0];
-            checkAndMakePath(fpath);
-            int wfd = open(fpath,O_WRONLY|O_CREAT,0666);
-            if(wfd == -1){
-                perror("open");
-            }
-            char *wbuf = buf+1+strlen(fpath);
-            write(wfd,wbuf,strlen(wbuf));
-            close(wfd);
-            printf("Added new data at %s\n",fpath);
+            write(wfd,buf,nread);
+            toRead -= nread;
+//                printf("[uid = %s]: Received %ld bytes, Remaining %ld bytes\n",uid,nread,toRead);
         }
     }
-    else{
-        ps("[ERROR]: Timeout.");
-        return false;
-    }
+    fcntl(sockfd,F_SETFL,val);
+    close(wfd);
+    printf("[uid = %s]: Received File.\n",uid);
     return true;
 }
 
-int execute_cmd(int sockfd, char *cmd){
+
+int execute_cmd(int sockfd, char *cmd, int *p){
+//    ps(cmd);
     char tmp = cmd[3];
     cmd[3] = '\0';
     if(equals(cmd,"PUT")){
@@ -224,48 +209,83 @@ int execute_cmd(int sockfd, char *cmd){
         long size;
         cmd = cmd+4;
         sscanf(cmd,"%ld",&size);
+        char *uid = genRandomName(15);
         fd_set wset;
         FD_ZERO(&wset);
         FD_SET(sockfd,&wset);
         select(sockfd+1,NULL,&wset,NULL,NULL);
         if(FD_ISSET(sockfd,&wset)){
-            char tbuf[] = "READY";
-            write(sockfd,tbuf,strlen(tbuf));
-            if(!recvData(sockfd,size))
-                ps("Error Receiving data.");
+            write(sockfd,uid,strlen(uid));
+            printf("Adding new file, uid = %s\n",uid);
+            if(fork() == 0){
+                close(p[0]);
+                if(!recvFile(sockfd,size,uid))
+                    ps("Error Receiving file");
+                char tbuf[20] = {0};
+                sprintf(tbuf,"%d",sockfd);
+                write(p[1],tbuf,strlen(tbuf));
+                exit(0);
+            }
+            close(p[1]);
             return true;
         } else
             return false;
     }
     else if(equals(cmd,"GET")){
         cmd[3] = tmp;
-        char *fpath = cmd+4;
+        char *uid = cmd+4;
+        char *fpath = allocString(strlen(uid) + 10);
+        strcat(fpath,BASE_DIR);
+        strcat(fpath,uid);
         long sz = getFileSize(fpath);
-        fd_set wset;
+        char buf[20] = {0};
+        sprintf(buf,"%ld",sz);
+        fd_set wset, rset;
         FD_ZERO(&wset);
         FD_SET(sockfd,&wset);
         select(sockfd+1,NULL,&wset,NULL,NULL);
         if(FD_ISSET(sockfd,&wset)){
-            if(sz == -1){
-                char buf[20] = {0};
-                sprintf(buf,"%ld",sz);
-                if(write(sockfd,buf,strlen(buf)) == 0)
-                    perror("write");
-            }
-            else if(!sendData(sockfd,fpath,sz))
-                ps("Error Sending data.");
+            write(sockfd,buf,strlen(buf));
         }
         if(sz == -1)
             return false;
-        else
-            return true;
+        FD_ZERO(&rset);
+        FD_SET(sockfd,&rset);
+        select(sockfd+1,&rset,NULL,NULL,NULL);
+        if(FD_ISSET(sockfd,&rset)){
+            int nr = read(sockfd,buf,19);
+            buf[nr] = '\0';
+            if(equals(buf,"READY")){
+                printf("Sending file, uid = %s\n",uid);
+                if(fork() == 0){
+                    close(p[0]);
+                    if(!sendFile(sockfd,fpath,sz))
+                        ps("Error Sending file");
+                    char tbuf[20] = {0};
+                    sprintf(tbuf,"%d",sockfd);
+                    write(p[1],tbuf,strlen(tbuf));
+                    exit(0);
+                }
+                close(p[1]);
+                return true;
+            }
+            else{
+                return false;
+            }
+
+        }
+        return false;
 
     }
     else if(equals(cmd,"DEL")){
         cmd[3] = tmp;
-        char *fpath = cmd+4;
+        char *uid = cmd+4;
+        char *fpath = allocString(strlen(uid) + 10);
+        strcat(fpath,BASE_DIR);
+        strcat(fpath,uid);
+        printf("Removing file, uid = %s\n",uid);
         if(fork() == 0){
-            execlp("rm","rm","-r",fpath,NULL);
+            execlp("rm","rm",fpath,NULL);
             perror("execlp");
             exit(0);
         }
@@ -279,63 +299,7 @@ int execute_cmd(int sockfd, char *cmd){
         if(FD_ISSET(sockfd,&wset)){
             write(sockfd,buf,strlen(buf));
         }
-        printf("Removed entries at %s\n",fpath);
-        return true;
-    }
-    else if(equals(cmd,"MOV")){
-        cmd[3] = tmp;
-        char **cmdarr = strSplit(cmd,' ');
-        char *srcpath = cmdarr[1];
-        char *dstpath = cmdarr[2];
-        if(fork() == 0){
-            execlp("mv","mv",srcpath,dstpath,NULL);
-            perror("execlp");
-            exit(0);
-        }
-        wait(NULL);
-        char buf[20] = {0};
-        strcpy(buf,"DONE");
-        fd_set wset;
-        FD_ZERO(&wset);
-        FD_SET(sockfd,&wset);
-        select(sockfd+1,NULL,&wset,NULL,NULL);
-        if(FD_ISSET(sockfd,&wset)){
-            write(sockfd,buf,strlen(buf));
-        }
-        printf("Moved entries at %s to %s\n",srcpath,dstpath);
-        return true;
-    }
-    else if(equals(cmd,"LS ")){
-        cmd[3] = tmp;
-        char *fpath = cmd+3;
-        int p[2];
-        pipe(p);
-        if(fork() == 0){
-            close(1);
-            close(p[0]);
-            dup2(p[1],1);
-            execlp("ls","ls","-F",fpath,NULL);
-            perror("execlp");
-            exit(0);
-        }
-        close(p[1]);
-        wait(NULL);
-
-        char buf[TCP_BUFFER_SIZE] = {0};
-        int nr = read(p[0],buf,TCP_BUFFER_SIZE);
-        if(nr == 0){
-            sprintf(buf,"-1");
-            nr = 2;
-        }
-        fd_set wset;
-        FD_ZERO(&wset);
-        FD_SET(sockfd,&wset);
-        select(sockfd+1,NULL,&wset,NULL,NULL);
-        if(FD_ISSET(sockfd,&wset)){
-            write(sockfd,buf,nr);
-        }
-        printf("Sent ls data for %s\n",fpath);
-        return true;
+        return 2;
     }
     else{
         cmd[3] = tmp;
@@ -394,6 +358,25 @@ void runServer(int port){
 
             if((sockfd = client[i]) == -1)
                 continue;
+            if(client[i] < 0){
+                sockfd = -1 * client[i];    //this is a pipe
+                if(FD_ISSET(sockfd,&rset)){
+                    wait(NULL);
+                    char buf[20] = {0};
+                    if((nread = read(sockfd,buf,19)) <= 0){
+                        perror("pipe");
+                    }
+                    close(sockfd);
+                    int sfd;
+                    sscanf(buf,"%d",&sfd);
+                    client[i] = sfd;
+                    FD_CLR(sockfd,&rset0);
+                    FD_SET(sfd,&rset0);
+                    if(--nready <= 0)
+                        break;
+                }
+                continue;
+            }
             if(FD_ISSET(sockfd,&rset)){
                 //this socket is available for reading
                 char buf[TCP_BUFFER_SIZE] = {0};
@@ -404,9 +387,26 @@ void runServer(int port){
                     client[i] = -1;
                 }
                 else{
+                    int p[2];
+                    pipe(p);
                     buf[nread] = '\0';
-                    if(!execute_cmd(sockfd,buf))
+                    int ecret;
+                    if((ecret=execute_cmd(sockfd,trim(buf),p))){
+                        if(ecret != 2){
+                            FD_CLR(sockfd,&rset0);
+                            FD_SET(p[0],&rset0);
+                            maxfd = max(maxfd,p[0]);
+                            client[i] = (p[0]) * -1;
+                        }
+                        else{
+                            close(p[0]);
+                            close(p[1]);
+                        }
+                    }
+                    else{
+                        ps(buf);
                         printf("Error in executing command\n");
+                    }
                 }
                 if(--nready <= 0)
                     break;
@@ -417,12 +417,12 @@ void runServer(int port){
 }
 
 int main(int argc, char *argv[]) {
-//    printf("Hello, World!\n");
+    srand(time(0));
     int port;
     if(argc == 2)
         sscanf(argv[1],"%d",&port);
     else
-        port = 5555;
+        port = 8081;
     makeBigfsDir();
     runServer(port);
 

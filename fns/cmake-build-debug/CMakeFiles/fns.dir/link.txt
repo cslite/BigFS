@@ -1,1 +1,1 @@
-/usr/bin/cc -g   CMakeFiles/fns.dir/main.c.o  -o fns 
+/usr/bin/cc -g   CMakeFiles/fns.dir/FileNameServer.c.o  -o fns 

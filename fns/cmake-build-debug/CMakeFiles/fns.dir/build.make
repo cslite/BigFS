@@ -57,27 +57,27 @@ include CMakeFiles/fns.dir/progress.make
 # Include the compile flags for this target's objects.
 include CMakeFiles/fns.dir/flags.make
 
-CMakeFiles/fns.dir/main.c.o: CMakeFiles/fns.dir/flags.make
-CMakeFiles/fns.dir/main.c.o: ../main.c
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/tussank/bigfs2/fns/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building C object CMakeFiles/fns.dir/main.c.o"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -o CMakeFiles/fns.dir/main.c.o   -c /home/tussank/bigfs2/fns/main.c
+CMakeFiles/fns.dir/FileNameServer.c.o: CMakeFiles/fns.dir/flags.make
+CMakeFiles/fns.dir/FileNameServer.c.o: ../FileNameServer.c
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/tussank/bigfs2/fns/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building C object CMakeFiles/fns.dir/FileNameServer.c.o"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -o CMakeFiles/fns.dir/FileNameServer.c.o   -c /home/tussank/bigfs2/fns/FileNameServer.c
 
-CMakeFiles/fns.dir/main.c.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing C source to CMakeFiles/fns.dir/main.c.i"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /home/tussank/bigfs2/fns/main.c > CMakeFiles/fns.dir/main.c.i
+CMakeFiles/fns.dir/FileNameServer.c.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing C source to CMakeFiles/fns.dir/FileNameServer.c.i"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -E /home/tussank/bigfs2/fns/FileNameServer.c > CMakeFiles/fns.dir/FileNameServer.c.i
 
-CMakeFiles/fns.dir/main.c.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/fns.dir/main.c.s"
-	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/tussank/bigfs2/fns/main.c -o CMakeFiles/fns.dir/main.c.s
+CMakeFiles/fns.dir/FileNameServer.c.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/fns.dir/FileNameServer.c.s"
+	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -S /home/tussank/bigfs2/fns/FileNameServer.c -o CMakeFiles/fns.dir/FileNameServer.c.s
 
 # Object files for target fns
 fns_OBJECTS = \
-"CMakeFiles/fns.dir/main.c.o"
+"CMakeFiles/fns.dir/FileNameServer.c.o"
 
 # External object files for target fns
 fns_EXTERNAL_OBJECTS =
 
-fns: CMakeFiles/fns.dir/main.c.o
+fns: CMakeFiles/fns.dir/FileNameServer.c.o
 fns: CMakeFiles/fns.dir/build.make
 fns: CMakeFiles/fns.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/tussank/bigfs2/fns/cmake-build-debug/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking C executable fns"

@@ -123,32 +123,32 @@ fns/fast:
 	$(MAKE) -f CMakeFiles/fns.dir/build.make CMakeFiles/fns.dir/build
 .PHONY : fns/fast
 
-main.o: main.c.o
+FileNameServer.o: FileNameServer.c.o
 
-.PHONY : main.o
+.PHONY : FileNameServer.o
 
 # target to build an object file
-main.c.o:
-	$(MAKE) -f CMakeFiles/fns.dir/build.make CMakeFiles/fns.dir/main.c.o
-.PHONY : main.c.o
+FileNameServer.c.o:
+	$(MAKE) -f CMakeFiles/fns.dir/build.make CMakeFiles/fns.dir/FileNameServer.c.o
+.PHONY : FileNameServer.c.o
 
-main.i: main.c.i
+FileNameServer.i: FileNameServer.c.i
 
-.PHONY : main.i
+.PHONY : FileNameServer.i
 
 # target to preprocess a source file
-main.c.i:
-	$(MAKE) -f CMakeFiles/fns.dir/build.make CMakeFiles/fns.dir/main.c.i
-.PHONY : main.c.i
+FileNameServer.c.i:
+	$(MAKE) -f CMakeFiles/fns.dir/build.make CMakeFiles/fns.dir/FileNameServer.c.i
+.PHONY : FileNameServer.c.i
 
-main.s: main.c.s
+FileNameServer.s: FileNameServer.c.s
 
-.PHONY : main.s
+.PHONY : FileNameServer.s
 
 # target to generate assembly for a file
-main.c.s:
-	$(MAKE) -f CMakeFiles/fns.dir/build.make CMakeFiles/fns.dir/main.c.s
-.PHONY : main.c.s
+FileNameServer.c.s:
+	$(MAKE) -f CMakeFiles/fns.dir/build.make CMakeFiles/fns.dir/FileNameServer.c.s
+.PHONY : FileNameServer.c.s
 
 # Help Target
 help:
@@ -159,9 +159,9 @@ help:
 	@echo "... rebuild_cache"
 	@echo "... fns"
 	@echo "... edit_cache"
-	@echo "... main.o"
-	@echo "... main.i"
-	@echo "... main.s"
+	@echo "... FileNameServer.o"
+	@echo "... FileNameServer.i"
+	@echo "... FileNameServer.s"
 .PHONY : help
 
 
