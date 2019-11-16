@@ -147,6 +147,13 @@ $ cat bigfs/code/client.c
 ```
 **Note**: _`cat`on local files is supported._
 
+### exit
+
+To exit from the client application,
+```console
+$ exit
+```
+
 ## Working
 
 ### Temporary Directory
@@ -275,3 +282,59 @@ Removes the entry for the remote file at `remote_path` from the FNS.
 
 - Write to the socket, `DEL <remote_path>`
 - Read the success message `DONE` sent by the server.
+
+### Moving an entry in the FileNameServer
+
+Declaration of the moveFnsEntry function,
+```C
+int moveFnsEntry(char *srcPath, char *destPath);
+```
+Moves the file information at remote path `srcPath` to the remote path `destPath`.
+
+#### Steps for the Client
+
+- Write to the socket, `MOV <srcPath> <destPath>`.
+- Read the success message `DONE` sent by the server.
+
+### Getting ls output from the FileNameServer
+
+Declaration of the getLs function,
+```C
+char **getLs(char *remote_path);
+```
+Gets the `ls` output of the remote directory at `remote_path`, converts it into an array and return.
+
+#### Steps for the Client
+
+- Write to the socket, `LS <remote_path>`.
+- Read the output from the socket.
+
+### Uploading a File to BigFS
+
+Declaration of the uploadFile function,
+```C
+int uploadFile(char *rpath, char *fpath);
+```
+Uploads the local file at `fpath` to remote path `rpath`.
+
+#### Steps
+
+- Split the file into 1MB blocks and get value of `numParts`.
+- Fork `num_FDS` number of child processes, each simultaneously uploading its set of parts to its FDS.
+- Any part `k` goes to FDS with index `k % num_FDS`.
+- After all parts get uploaded, UID data is sent to the FileNameServer.
+
+### Downloading a File from BigFS
+
+Declaration of the downloadFile function,
+```C
+char *downloadFile(char *rpath);
+```
+Downloads the remote file at `rpath` to a temporary location and return the local path.
+
+#### Steps
+
+- Get the UID information from the FNS.
+- Fork `num_FDS` number of child processes, each simultaneously downloading its set of parts.
+- Any part `k` is downloaded from a FDS with index `k % num_FDS`.
+- After all parts get downloaded, they are joined and the path of the final file is returned.
