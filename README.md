@@ -48,7 +48,7 @@ $ ./bigfs config.txt
 
 The config file should have the following format,
 
-```Java
+```console
 <FNS IP> <FNS PORT>
 <k = Number of FDS>
 <FDS0 IP> <FDS0 PORT>
