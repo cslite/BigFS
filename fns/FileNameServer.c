@@ -16,6 +16,7 @@
 #define BASE_DIR "bigfs/"
 #define TCP_BUFFER_SIZE 2047
 #define MAX_CLIENTS 20
+#define MAX_ARRAY_SIZE (1<<20)
 
 //for debug printing
 void pt(int x){
@@ -177,18 +178,14 @@ void checkAndMakePath(char *fpath){
 int recvData(int sockfd, long toRead){
     //assuming sockfd is already set to non-blocking
     char *fpath;
-    struct timeval timeout;
-    timeout.tv_sec = 30;
-    timeout.tv_usec = 0;
     long nread;
+    int val = fcntl(sockfd,F_GETFL);
+    fcntl(sockfd,F_SETFL,val & (~O_NONBLOCK));
+    char buf[MAX_ARRAY_SIZE];
+    char *bufp = buf;
+    while(toRead > 0){
 
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
-    FD_SET(sockfd,&read_fds);
-    select(sockfd+1,&read_fds,NULL,NULL,&timeout);
-    char buf[TCP_BUFFER_SIZE+1] = {0};
-    if(FD_ISSET(sockfd,&read_fds)){
-        if((nread = read(sockfd,buf,toRead)) < 0){
+        if((nread = read(sockfd,bufp,min(toRead,TCP_BUFFER_SIZE))) < 0){
             perror("read");
         }
         else if(nread == 0){
@@ -196,23 +193,24 @@ int recvData(int sockfd, long toRead){
             return false;
         }
         else{
-            char **datarr = strSplit(buf,'#');
-            fpath = datarr[0];
-            checkAndMakePath(fpath);
-            int wfd = open(fpath,O_WRONLY|O_CREAT,0666);
-            if(wfd == -1){
-                perror("open");
-            }
-            char *wbuf = buf+1+strlen(fpath);
-            write(wfd,wbuf,strlen(wbuf));
-            close(wfd);
-            printf("Added new data at %s\n",fpath);
+            bufp += nread;
+            toRead -= nread;
+//                printf("[uid = %s]: Received %ld bytes, Remaining %ld bytes\n",uid,nread,toRead);
         }
     }
-    else{
-        ps("[ERROR]: Timeout.");
-        return false;
+    bufp[0] = '\0';
+    fcntl(sockfd,F_SETFL,val);
+    char **datarr = strSplit(buf,'#');
+    fpath = datarr[0];
+    checkAndMakePath(fpath);
+    int wfd = open(fpath,O_WRONLY|O_CREAT,0666);
+    if(wfd == -1){
+        perror("open");
     }
+    char *wbuf = buf+1+strlen(fpath);
+    write(wfd,wbuf,strlen(wbuf));
+    close(wfd);
+    printf("Added new data at %s\n",fpath);
     return true;
 }
 
@@ -241,24 +239,29 @@ int execute_cmd(int sockfd, char *cmd){
         cmd[3] = tmp;
         char *fpath = cmd+4;
         long sz = getFileSize(fpath);
-        fd_set wset;
+        char buf[20] = {0};
+        sprintf(buf,"%ld",sz);
+        fd_set wset,rset;
         FD_ZERO(&wset);
         FD_SET(sockfd,&wset);
         select(sockfd+1,NULL,&wset,NULL,NULL);
         if(FD_ISSET(sockfd,&wset)){
-            if(sz == -1){
-                char buf[20] = {0};
-                sprintf(buf,"%ld",sz);
-                if(write(sockfd,buf,strlen(buf)) == 0)
-                    perror("write");
-            }
-            else if(!sendData(sockfd,fpath,sz))
-                ps("Error Sending data.");
+            write(sockfd,buf,strlen(buf));
         }
         if(sz == -1)
             return false;
-        else
-            return true;
+        FD_ZERO(&rset);
+        FD_SET(sockfd,&rset);
+        select(sockfd+1,&rset,NULL,NULL,NULL);
+        if(FD_ISSET(sockfd,&rset)){
+            int nr = read(sockfd,buf,19);
+            buf[nr] = '\0';
+            if(equals(buf,"READY")){
+                if(!sendData(sockfd,fpath,sz))
+                    ps("Error Sending data.");
+            }
+        }
+        return true;
 
     }
     else if(equals(cmd,"DEL")){
@@ -385,7 +388,7 @@ void runServer(int port){
             FD_SET(connfd,&rset0);
             if(connfd > maxfd)
                 maxfd = connfd;
-            if(i > maxi)
+            if(i > maxi && i != MAX_CLIENTS)
                 maxi = i;
             if(--nready <= 0)
                 continue;

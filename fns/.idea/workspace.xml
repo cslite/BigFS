@@ -12,34 +12,17 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="257c88e4-d782-45b3-879d-07932694a31e" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/../cmake-build-debug/config.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/fns.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/C.includecache" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/FileNameServer.c.o" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/depend.internal" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cmake-build-debug/bigfs/kio.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cmake-build-debug/bigfs/tg/config.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cmake-build-debug/fns" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../tmp.avi" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../cmake-build-debug/testfile.pdf" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmake-build-debug/bigfs/CMakeCache.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../Client.c" beforeDir="false" afterPath="$PROJECT_DIR$/../Client.c" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../cmake-build-debug/CMakeFiles/bigfs.dir/Client.c.o" beforeDir="false" afterPath="$PROJECT_DIR$/../cmake-build-debug/CMakeFiles/bigfs.dir/Client.c.o" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../cmake-build-debug/bigfs" beforeDir="false" afterPath="$PROJECT_DIR$/../cmake-build-debug/bigfs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../config.txt" beforeDir="false" afterPath="$PROJECT_DIR$/../config.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../fds/cmake-build-debug/CMakeFiles/fds.dir/FileDataServer.c.o" beforeDir="false" afterPath="$PROJECT_DIR$/../fds/cmake-build-debug/CMakeFiles/fds.dir/FileDataServer.c.o" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../fds/cmake-build-debug/fds" beforeDir="false" afterPath="$PROJECT_DIR$/../fds/cmake-build-debug/fds" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/FileNameServer.c" beforeDir="false" afterPath="$PROJECT_DIR$/FileNameServer.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/Makefile.cmake" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/Makefile.cmake" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/clion-log.txt" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/clion-log.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/DependInfo.cmake" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/DependInfo.cmake" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/build.make" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/build.make" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/cmake_clean.cmake" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/cmake_clean.cmake" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/depend.make" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/depend.make" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/link.txt" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/link.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/Makefile" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/Makefile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/fns.cbp" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/fns.cbp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/FileNameServer.c.o" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/FileNameServer.c.o" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cmake-build-debug/fns" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/fns" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -95,6 +78,11 @@
       <updated>1571785157999</updated>
       <workItem from="1571785160350" duration="11144000" />
       <workItem from="1571862805370" duration="4830000" />
+      <workItem from="1572287376795" duration="1266000" />
+      <workItem from="1572894897188" duration="3837000" />
+      <workItem from="1573576095714" duration="636000" />
+      <workItem from="1573669818967" duration="1320000" />
+      <workItem from="1573824452203" duration="4512000" />
     </task>
     <servers />
   </component>
