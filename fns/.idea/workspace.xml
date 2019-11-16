@@ -12,17 +12,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="257c88e4-d782-45b3-879d-07932694a31e" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/../cmake-build-debug/testfile.pdf" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/cmake-build-debug/bigfs/CMakeCache.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../Client.c" beforeDir="false" afterPath="$PROJECT_DIR$/../Client.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../cmake-build-debug/CMakeFiles/bigfs.dir/Client.c.o" beforeDir="false" afterPath="$PROJECT_DIR$/../cmake-build-debug/CMakeFiles/bigfs.dir/Client.c.o" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../cmake-build-debug/bigfs" beforeDir="false" afterPath="$PROJECT_DIR$/../cmake-build-debug/bigfs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../fds/cmake-build-debug/CMakeFiles/fds.dir/FileDataServer.c.o" beforeDir="false" afterPath="$PROJECT_DIR$/../fds/cmake-build-debug/CMakeFiles/fds.dir/FileDataServer.c.o" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../fds/cmake-build-debug/fds" beforeDir="false" afterPath="$PROJECT_DIR$/../fds/cmake-build-debug/fds" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/FileNameServer.c" beforeDir="false" afterPath="$PROJECT_DIR$/FileNameServer.c" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/FileNameServer.c.o" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/CMakeFiles/fns.dir/FileNameServer.c.o" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmake-build-debug/fns" beforeDir="false" afterPath="$PROJECT_DIR$/cmake-build-debug/fns" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />

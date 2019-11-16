@@ -630,7 +630,7 @@ void test_newFnsEntry(){
  */
 char **getFnsData(char *remote_path){
     long size;
-    char buf[TCP_BUFFER_SIZE];
+    char buf[MAX_ARRAY_SIZE];
     sprintf(buf,"GET %s",remote_path);
     if(write(FNS_sfd,buf,strlen(buf)) == 0)
         socketLost();
