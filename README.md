@@ -338,3 +338,10 @@ Downloads the remote file at `rpath` to a temporary location and return the loca
 - Fork `num_FDS` number of child processes, each simultaneously downloading its set of parts.
 - Any part `k` is downloaded from a FDS with index `k % num_FDS`.
 - After all parts get downloaded, they are joined and the path of the final file is returned.
+
+## Limitations
+
+- When entering a command, filepath should not contain spaces.
+- Changing the number or order of FileDataServers in the config file will result in corruption of old files on the server.
+- Maximum length currently supported for the output of `ls` command is `2047 bytes`.
+- Trying to copy files larger than `64 GB` may have undefined behaviour.
